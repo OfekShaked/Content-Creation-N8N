@@ -1,0 +1,1433 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 1
+                        }
+                    ]
+                }
+            },
+            "id": "41df9ba7-0aa9-40c5-9c31-0f7b3693d1d0",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [
+                -22688,
+                -2648
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "WITH cte AS (SELECT id FROM ideas WHERE status = 'researching' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE ideas i SET status = 'processing', updated_at = NOW() FROM cte WHERE i.id = cte.id RETURNING i.*;",
+                "options": {}
+            },
+            "id": "ee2a39f4-8959-47dd-b060-07545f49fcbd",
+            "name": "Claim Idea",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -22464,
+                -2648
+            ],
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "fc3125c8-b59b-4b2d-b62d-7dc8e95e0cca",
+            "name": "Idea Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -22240,
+                -2648
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Map Research Input] Input:', JSON.stringify($json, null, 2));\nconst output = [{ json: { query: $json.raw_input, idea_id: $json.id, chat_id: $json.chat_id, requested_tone: $json.requested_tone || 'professional' } }];\nconsole.log('[Map Research Input] Output:', JSON.stringify(output, null, 2));\nreturn output;"
+            },
+            "id": "f4b76d13-a264-499e-8398-6cb6876909e9",
+            "name": "Map Research Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -22016,
+                -2648
+            ]
+        },
+        {
+            "parameters": {
+                "workflowId": "ldDGUYrdlAPfha7P",
+                "mode": "each",
+                "options": {}
+            },
+            "id": "d04bcc7d-ec8d-4290-88af-b641ee315229",
+            "name": "Exec Research",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1,
+            "position": [
+                -21792,
+                -2648
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "update",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "ideas",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "research_summary": "={{ $json.summary }}",
+                        "status": "drafting",
+                        "updated_at": "={{ $now.toISO() }}",
+                        "id": "={{ $('Map Research Input').item.json.idea_id }}"
+                    },
+                    "matchingColumns": [
+                        "id"
+                    ],
+                    "schema": [
+                        {
+                            "id": "id",
+                            "displayName": "id",
+                            "type": "string",
+                            "canBeUsedToMatch": true
+                        },
+                        {
+                            "id": "research_summary",
+                            "displayName": "research_summary",
+                            "type": "string",
+                            "canBeUsedToMatch": false
+                        },
+                        {
+                            "id": "status",
+                            "displayName": "status",
+                            "type": "string",
+                            "canBeUsedToMatch": false
+                        },
+                        {
+                            "id": "updated_at",
+                            "displayName": "updated_at",
+                            "type": "dateTime",
+                            "canBeUsedToMatch": false
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "f22e11eb-5523-4024-8bf4-065e09771c3d",
+            "name": "Update Idea",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -21568,
+                -2648
+            ],
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Prep Claims] === STARTING ===');\n// Read from Exec Research explicitly to allow sequential execution\nconst research = $('Exec Research').first().json;\nconsole.log('[Prep Claims] Research summary length:', research.summary?.length);\nconst claims = research.claims || [];\nlet ideaId;\ntry {\n   ideaId = $('Map Research Input').first().json.idea_id;\n} catch (e) {\n   console.log('[Prep Claims] Fallback to first()');\n   // Fallback: Access via first item if pairing fails\n   ideaId = $('Map Research Input').first().json.idea_id;\n}\nconsole.log('[Prep Claims] ideaId:', ideaId, 'claims count:', claims.length);\n\nif (claims.length === 0) {\n  console.log('[Prep Claims] WARNING: No claims found in research output!');\n  return [];\n}\n\nconst output = claims.map(c => ({\n  json: {\n    idea_id: ideaId,\n    claim_text: c.claim_text || c,\n    claim_key: c.claim_key || '',\n    verdict: 'unverified',\n    source_url: c.source_url || null\n  }\n}));\nconsole.log('[Prep Claims] Output count:', output.length);\nconsole.log('[Prep Claims] === COMPLETED ===');\nreturn output;"
+            },
+            "id": "a52f1b6d-fd7d-4f62-a497-a0409765169e",
+            "name": "Prep Claims",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -21344,
+                -2648
+            ],
+            "alwaysOutputData": true,
+            "continueOnFail": true
+        },
+        {
+            "parameters": {
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "claims",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "idea_id": "={{ $json.idea_id }}",
+                        "claim_key": "={{ $json.claim_key }}",
+                        "claim_text": "={{ $json.claim_text }}",
+                        "verdict": "={{ $json.verdict }}",
+                        "source_url": "={{ $json.source_url }}"
+                    }
+                },
+                "options": {}
+            },
+            "id": "c678f3b8-9662-4a1f-beca-2a59d0127ac4",
+            "name": "Save Claims",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -21120,
+                -2648
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Prepare Draft Context] Starting...');\n// Prepare context for both platform branches\nconst research = $('Exec Research').item.json;\nconst idea = $('Map Research Input').item.json;\nconsole.log('[Prepare Draft Context] Research summary length:', research.summary?.length, 'Trending angle:', research.trending_angle);\n\nconst output = [{\n  json: {\n    idea_id: idea.idea_id,\n    chat_id: idea.chat_id,\n    requested_tone: idea.requested_tone,\n    research_summary: research.summary,\n    trending_angle: research.trending_angle || ''\n  }\n}];\nconsole.log('[Prepare Draft Context] Output:', JSON.stringify(output, null, 2));\nreturn output;"
+            },
+            "id": "2bad204d-c558-4c13-9294-b4cbe438ee4d",
+            "name": "Prepare Draft Context",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -20896,
+                -2648
+            ],
+            "alwaysOutputData": true
+        },
+        {
+            "parameters": {
+                "operation": "select",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "prompt_templates",
+                    "mode": "list"
+                },
+                "where": {
+                    "values": [
+                        {
+                            "column": "key",
+                            "value": "draft.linkedin.v1"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "7888c3a1-3a07-4164-b5dd-d9098e4f2c53",
+            "name": "Read Prompt LI",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -20672,
+                -2648
+            ],
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "select",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "prompt_templates",
+                    "mode": "list"
+                },
+                "where": {
+                    "values": [
+                        {
+                            "column": "key",
+                            "value": "draft.x_thread.v1"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "660e1aa8-f224-4870-ab08-3f4e25f258a6",
+            "name": "Read Prompt X",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -18208,
+                -2528
+            ],
+            "alwaysOutputData": true,
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Build Prompt LI] === START ===');\nconsole.log('[Build Prompt LI] Input $json:', JSON.stringify($json, null, 2));\nconst templateNode = $('Read Prompt LI');\nlet prompt, critiqueNotes, iteration = 1;\n\nif ($json.user_prompt) {\n  console.log('[Build Prompt LI] Branch: Using $json as prompt (has user_prompt)');\n  prompt = $json;\n} else {\n  console.log('[Build Prompt LI] Branch: Using template from DB');\n  prompt = templateNode.first().json;\n  critiqueNotes = $json.critique_notes;\n  iteration = $json.iteration || 1;\n  console.log('[Build Prompt LI] Critique notes:', critiqueNotes);\n  console.log('[Build Prompt LI] Iteration:', iteration);\n}\n\nconst ctx = $('Prepare Draft Context').first().json;\nconsole.log('[Build Prompt LI] Context research_summary length:', ctx.research_summary?.length);\n\n// Interpolate user_prompt placeholders\nlet userPrompt = prompt.user_prompt\n  .replace(/\\{\\{research_summary\\}\\}/g, ctx.research_summary)\n  .replace(/\\{\\{trending_angle\\}\\}/g, ctx.trending_angle)\n  .replace(/\\{\\{requested_tone\\}\\}/g, ctx.requested_tone);\n\nconsole.log('[Build Prompt LI] User prompt BEFORE critique injection (length):', userPrompt.length);\n\nif (critiqueNotes) {\n   userPrompt += `\\n\\nIMPORTANT: This is iteration ${iteration}. The previous draft was criticized. Fix these issues:\\n${critiqueNotes}`;\n   console.log('[Build Prompt LI] User prompt AFTER critique injection (length):', userPrompt.length);\n   console.log('[Build Prompt LI] Critique section added:', `IMPORTANT: This is iteration ${iteration}. The previous draft was criticized. Fix these issues:\\n${critiqueNotes}`);\n}\n\nconst output = [{\n  json: {\n    model: prompt.model,\n    temperature: parseFloat(prompt.temperature),\n    system_prompt: prompt.system_prompt,\n    user_prompt: userPrompt,\n    idea_id: ctx.idea_id,\n    chat_id: ctx.chat_id,\n    iteration: iteration\n  }\n}];\nconsole.log('[Build Prompt LI] === OUTPUT ===');\nconsole.log('[Build Prompt LI] Model:', output[0].json.model, 'Iteration:', output[0].json.iteration);\nconsole.log('[Build Prompt LI] User prompt final (first 200 chars):', output[0].json.user_prompt.substring(0, 200));\nconsole.log('[Build Prompt LI] User prompt final (last 200 chars):', output[0].json.user_prompt.substring(output[0].json.user_prompt.length - 200));\nreturn output;"
+            },
+            "id": "f50f01a5-44e5-4778-9b86-f92d95ae8e10",
+            "name": "Build Prompt LI",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -20448,
+                -2648
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Build Prompt X] === START ===');\nconsole.log('[Build Prompt X] Input $json:', JSON.stringify($json, null, 2));\nconst templateNode = $('Read Prompt X');\nlet prompt, critiqueNotes, iteration = 1;\n\nif ($json.user_prompt) {\n  console.log('[Build Prompt X] Branch: Using $json as prompt (has user_prompt)');\n  prompt = $json;\n} else {\n  console.log('[Build Prompt X] Branch: Using template from DB');\n  prompt = templateNode.first().json;\n  critiqueNotes = $json.critique_notes;\n  iteration = $json.iteration || 1;\n  console.log('[Build Prompt X] Critique notes:', critiqueNotes);\n  console.log('[Build Prompt X] Iteration:', iteration);\n}\n\nconst ctx = $('Prepare Draft Context').first().json;\nconsole.log('[Build Prompt X] Context research_summary length:', ctx.research_summary?.length);\n\n// Interpolate user_prompt placeholders\nlet userPrompt = prompt.user_prompt\n  .replace(/\\{\\{research_summary\\}\\}/g, ctx.research_summary)\n  .replace(/\\{\\{trending_angle\\}\\}/g, ctx.trending_angle)\n  .replace(/\\{\\{requested_tone\\}\\}/g, ctx.requested_tone);\n\nconsole.log('[Build Prompt X] User prompt BEFORE critique injection (length):', userPrompt.length);\n\nif (critiqueNotes) {\n   userPrompt += `\\n\\nIMPORTANT: This is iteration ${iteration}. The previous draft was criticized. Fix these issues:\\n${critiqueNotes}`;\n   console.log('[Build Prompt X] User prompt AFTER critique injection (length):', userPrompt.length);\n   console.log('[Build Prompt X] Critique section added:', `IMPORTANT: This is iteration ${iteration}. The previous draft was criticized. Fix these issues:\\n${critiqueNotes}`);\n}\n\nconst output = [{\n  json: {\n    model: prompt.model,\n    temperature: parseFloat(prompt.temperature),\n    system_prompt: prompt.system_prompt,\n    user_prompt: userPrompt,\n    idea_id: ctx.idea_id,\n    chat_id: ctx.chat_id,\n    iteration: iteration\n  }\n}];\nconsole.log('[Build Prompt X] === OUTPUT ===');\nconsole.log('[Build Prompt X] Model:', output[0].json.model, 'Iteration:', output[0].json.iteration);\nconsole.log('[Build Prompt X] User prompt final (first 200 chars):', output[0].json.user_prompt.substring(0, 200));\nconsole.log('[Build Prompt X] User prompt final (last 200 chars):', output[0].json.user_prompt.substring(output[0].json.user_prompt.length - 200));\nreturn output;"
+            },
+            "id": "4fcdcd6e-03c8-48ba-aebe-adbc7a5500e8",
+            "name": "Build Prompt X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17984,
+                -2528
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"{{ $json.model }}\",\n  \"temperature\": {{ $json.temperature }},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+                "options": {}
+            },
+            "id": "e396d12b-bbf1-4b22-8e45-3e0ee5aaca2a",
+            "name": "Draft LinkedIn",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -20224,
+                -2720
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"{{ $json.model }}\",\n  \"temperature\": {{ $json.temperature }},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+                "options": {}
+            },
+            "id": "e21aa21d-4041-4360-bf04-b834fc806f97",
+            "name": "Draft X Thread",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -17760,
+                -2600
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Parse Draft LI] Input choices[0].message.content length:', $json.choices[0].message.content.length);\nconst content = JSON.parse($json.choices[0].message.content);\nconst ctx = $('Build Prompt LI').item.json;\nconsole.log('[Parse Draft LI] Parsed content keys:', Object.keys(content), 'Iteration:', ctx.iteration);\n\nconst output = [{\n  json: {\n    hook: content.hook,\n    body: content.body,\n    cta: content.cta,\n    idea_id: ctx.idea_id,\n    chat_id: ctx.chat_id,\n    iteration: ctx.iteration,\n    platform: 'linkedin'\n  }\n}];\nconsole.log('[Parse Draft LI] Output iteration:', output[0].json.iteration);\nreturn output;"
+            },
+            "id": "c088e9af-781b-4f99-abe6-d06fccad6246",
+            "name": "Parse Draft LI",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -20000,
+                -2720
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Parse Draft X] Input choices[0].message.content length:', $json.choices[0].message.content.length);\nconst content = JSON.parse($json.choices[0].message.content);\nconst ctx = $('Build Prompt X').item.json;\nconsole.log('[Parse Draft X] Parsed content keys:', Object.keys(content), 'Iteration:', ctx.iteration);\n\nconst output = [{\n  json: {\n    tweets: content.tweets,\n    idea_id: ctx.idea_id,\n    chat_id: ctx.chat_id,\n    iteration: ctx.iteration,\n    model: ctx.model,\n    platform: 'x_thread'\n  }\n}];\nconsole.log('[Parse Draft X] Output iteration:', output[0].json.iteration);\nreturn output;"
+            },
+            "id": "b7ae76a9-9636-43c7-8464-90976bddfdf9",
+            "name": "Parse Draft X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17536,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "select",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "prompt_templates",
+                    "mode": "list"
+                },
+                "where": {
+                    "values": [
+                        {
+                            "column": "key",
+                            "value": "critic.linkedin.v1"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "b1acb917-4dea-4f4d-807e-13e91222b3bd",
+            "name": "Read Critic Prompt LI",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -19776,
+                -2720
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "select",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "prompt_templates",
+                    "mode": "list"
+                },
+                "where": {
+                    "values": [
+                        {
+                            "column": "key",
+                            "value": "critic.x_thread.v1"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "800cd3fd-56fc-4f18-bba3-8acd63d9d2d5",
+            "name": "Read Critic Prompt X",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -16192,
+                -2600
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Build Critic Prompt LI] === START ===');\nconsole.log('[Build Critic Prompt LI] Template input:', JSON.stringify($json, null, 2));\nconst prompt = $json;\n// Always get the latest fresh draft from Parse Draft (whether first run or loop)\nconst draft = $('Parse Draft LI').item.json;\nconsole.log('[Build Critic Prompt LI] Draft iteration:', draft.iteration, 'Hook length:', draft.hook?.length, 'Body length:', draft.body?.length);\n\n// Interpolate critic prompt placeholders\nlet userPrompt = prompt.user_prompt\n  .replace(/\\{\\{hook\\}\\}/g, draft.hook)\n  .replace(/\\{\\{body\\}\\}/g, draft.body)\n  .replace(/\\{\\{cta\\}\\}/g, draft.cta);\n\nconst output = [{\n  json: {\n    model: prompt.model,\n    temperature: parseFloat(prompt.temperature),\n    system_prompt: prompt.system_prompt,\n    user_prompt: userPrompt,\n    current_draft: draft,\n    iteration: draft.iteration\n  }\n}];\nconsole.log('[Build Critic Prompt LI] Output iteration:', output[0].json.iteration);\nreturn output;"
+            },
+            "id": "cb73acf0-24ba-4080-b630-31ec872adbec",
+            "name": "Build Critic Prompt LI",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -19552,
+                -2720
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Build Critic Prompt X] === START ===');\nconsole.log('[Build Critic Prompt X] Template input:', JSON.stringify($json, null, 2));\nconst prompt = $json;\n// Always get the latest fresh draft from the validation step\nconst draft = $('Finalize X Draft').item.json;\nconsole.log('[Build Critic Prompt X] Draft iteration:', draft.iteration, 'Tweets count:', draft.tweets?.length);\n\n// Interpolate critic prompt placeholders\nlet userPrompt = prompt.user_prompt\n  .replace(/\\{\\{tweets_json\\}\\}/g, JSON.stringify(draft.tweets, null, 2));\n\nconst output = [{\n  json: {\n    model: prompt.model,\n    temperature: parseFloat(prompt.temperature),\n    system_prompt: prompt.system_prompt,\n    user_prompt: userPrompt,\n    current_draft: draft,\n    iteration: draft.iteration\n  }\n}];\nconsole.log('[Build Critic Prompt X] Output iteration:', output[0].json.iteration);\nreturn output;"
+            },
+            "id": "98efc88d-3217-4885-8c46-290cd6c5ac65",
+            "name": "Build Critic Prompt X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -15968,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"{{ $json.model }}\",\n  \"temperature\": {{ $json.temperature }},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+                "options": {}
+            },
+            "id": "baa3f020-bdc3-425e-ae6f-aa413e44e8dc",
+            "name": "Critic LI",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -19328,
+                -2720
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"{{ $json.model }}\",\n  \"temperature\": {{ $json.temperature }},\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": {{ JSON.stringify($json.system_prompt) }}\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.user_prompt) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+                "options": {}
+            },
+            "id": "c2346a20-1237-4a82-874d-92895638ebd2",
+            "name": "Critic X",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -15744,
+                -2600
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Parse Critique LI] === START ===');\nconsole.log('[Parse Critique LI] Critique response length:', $json.choices[0].message.content.length);\nconst critique = JSON.parse($json.choices[0].message.content);\nconst prev = $('Build Critic Prompt LI').item.json;\nconst currentIter = prev.iteration || 1;\nconsole.log('[Parse Critique LI] Critique score:', critique.score, 'Current iteration:', currentIter, 'Next iteration:', currentIter + 1);\nconsole.log('[Parse Critique LI] Raw critique object keys:', Object.keys(critique));\n\n// Format critique notes from fatal_flaws array or fallback fields\nlet critiqueNotes = '';\nif (critique.fatal_flaws && critique.fatal_flaws.length > 0) {\n  critiqueNotes = 'FATAL FLAWS:\\n' + critique.fatal_flaws.map((f, i) => `${i+1}. ${f}`).join('\\n');\n} else if (critique.critique_notes) {\n  critiqueNotes = critique.critique_notes;\n} else {\n  critiqueNotes = 'General feedback: Improve clarity and engagement';\n}\n\nif (critique.better_hook) {\n  critiqueNotes += '\\n\\nBETTER HOOK: ' + critique.better_hook;\n}\n\nconsole.log('[Parse Critique LI] Formatted critique notes:', critiqueNotes);\n\nconst output = [{\n  json: {\n    score: critique.score,\n    notes: critiqueNotes,\n    hook: critique.improved_version?.hook || critique.improved?.hook || prev.current_draft.hook,\n    body: critique.improved_version?.body || critique.improved?.body || prev.current_draft.body,\n    cta: critique.improved_version?.cta || critique.improved?.cta || prev.current_draft.cta,\n    idea_id: prev.current_draft.idea_id,\n    chat_id: prev.current_draft.chat_id,\n    iteration: currentIter + 1,\n    platform: 'linkedin'\n  }\n}];\nconsole.log('[Parse Critique LI] Output iteration:', output[0].json.iteration, 'Score:', output[0].json.score);\nconsole.log('[Parse Critique LI] Output notes (first 100 chars):', output[0].json.notes.substring(0, 100));\nreturn output;"
+            },
+            "id": "465d0d3a-9ce3-4577-9a4a-07bf74a24ca5",
+            "name": "Parse Critique LI",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -19104,
+                -2720
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Parse Critique X] === START ===');\nconsole.log('[Parse Critique X] Critique response length:', $json.choices[0].message.content.length);\nconst critique = JSON.parse($json.choices[0].message.content);\nconst prev = $('Build Critic Prompt X').item.json;\nconst currentIter = prev.iteration || 1;\nconsole.log('[Parse Critique X] Critique score:', critique.score, 'Current iteration:', currentIter, 'Next iteration:', currentIter + 1);\nconsole.log('[Parse Critique X] Raw critique object keys:', Object.keys(critique));\n\n// Format critique notes from fatal_flaws array or fallback fields\nlet critiqueNotes = '';\nif (critique.fatal_flaws && critique.fatal_flaws.length > 0) {\n  critiqueNotes = 'FATAL FLAWS:\\n' + critique.fatal_flaws.map((f, i) => `${i+1}. ${f}`).join('\\n');\n} else if (critique.critique_notes) {\n  critiqueNotes = critique.critique_notes;\n} else {\n  critiqueNotes = 'General feedback: Improve clarity and engagement';\n}\n\nif (critique.better_hook) {\n  critiqueNotes += '\\n\\nBETTER HOOK: ' + critique.better_hook;\n}\n\nconsole.log('[Parse Critique X] Formatted critique notes:', critiqueNotes);\n\nconst output = [{\n  json: {\n    score: critique.score,\n    notes: critiqueNotes,\n    tweets: critique.improved_version?.tweets || critique.improved?.tweets || prev.current_draft.tweets,\n    idea_id: prev.current_draft.idea_id,\n    chat_id: prev.current_draft.chat_id,\n    iteration: currentIter + 1,\n    platform: 'x_thread'\n  }\n}];\nconsole.log('[Parse Critique X] Output iteration:', output[0].json.iteration, 'Score:', output[0].json.score);\nconsole.log('[Parse Critique X] Output notes (first 100 chars):', output[0].json.notes.substring(0, 100));\nreturn output;"
+            },
+            "id": "c601a577-bd12-434d-8cd3-8ee5b8ae3c87",
+            "name": "Parse Critique X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -15520,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.score >= 9 || $json.iteration > 3 }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "e621f696-50c7-4df1-a780-b8fce2ae7e17",
+            "name": "Quality Gate LI",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -18880,
+                -2720
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.score >= 9 || $json.iteration > 3 }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "6f907fea-1341-4db7-b5f1-7a7baef256ed",
+            "name": "Quality Gate X",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -15296,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Loop Back LI] === START ===');\nconsole.log('[Loop Back LI] Input:', JSON.stringify($json, null, 2));\n// Loop back - update the draft for next critic iteration\nconst d = $json;\nconst output = [{\n  json: {\n    ...d,\n    critique_notes: d.notes\n  }\n}];\nconsole.log('[Loop Back LI] Output (looping to Build Prompt LI):', JSON.stringify(output, null, 2));\nreturn output;"
+            },
+            "id": "ade12c0e-3f86-4a4d-abfa-ec2566054729",
+            "name": "Loop Back LI",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -18656,
+                -2720
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Loop Back X] === START ===');\nconsole.log('[Loop Back X] Input:', JSON.stringify($json, null, 2));\n// Loop back - update the draft for next critic iteration\nconst d = $json;\nconst output = [{\n  json: {\n    ...d,\n    critique_notes: d.notes\n  }\n}];\nconsole.log('[Loop Back X] Output (looping to Build Prompt X):', JSON.stringify(output, null, 2));\nreturn output;"
+            },
+            "id": "9b4642e0-de22-4155-89ab-c057f3757675",
+            "name": "Loop Back X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -15072,
+                -2408
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Calculate next version_int for this draft\nconst draft = $json;\nreturn [{\n  json: {\n    ...draft,\n    // Version will be calculated by database DEFAULT or we set it to 1\n    version_int: 1,\n    content_json: { hook: draft.hook, body: draft.body, cta: draft.cta }\n  }\n}];"
+            },
+            "id": "b48cad37-3ab3-4a3a-b78c-3d60e848f8eb",
+            "name": "Prep LI Draft",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -18656,
+                -2528
+            ]
+        },
+        {
+            "parameters": {
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "drafts",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "idea_id": "={{ $json.idea_id }}",
+                        "platform": "={{ $json.platform }}",
+                        "content_json": "={{ JSON.stringify($json.content_json) }}",
+                        "critique_score": "={{ $json.score }}",
+                        "critique_notes": "={{ $json.notes }}",
+                        "version_int": "={{ $json.version_int }}"
+                    }
+                },
+                "options": {}
+            },
+            "id": "bdceaaa8-6f26-4a32-b407-ccdff5bf32e8",
+            "name": "Save Draft LI",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -18432,
+                -2528
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Calculate next version_int for this draft\nconst draft = $json;\nreturn [{\n  json: {\n    ...draft,\n    // Version will be calculated by database DEFAULT or we set it to 1\n    version_int: 1,\n    content_json: { tweets: draft.tweets }\n  }\n}];"
+            },
+            "id": "59621d17-8ac6-4383-87a6-cd1752570df9",
+            "name": "Prep X Draft",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -15072,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "drafts",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "idea_id": "={{ $json.idea_id }}",
+                        "platform": "={{ $json.platform }}",
+                        "content_json": "={{ JSON.stringify($json.content_json) }}",
+                        "critique_score": "={{ $json.score }}",
+                        "critique_notes": "={{ $json.notes }}",
+                        "version_int": "={{ $json.version_int }}"
+                    }
+                },
+                "options": {}
+            },
+            "id": "50547512-050b-465f-8b3a-ca19c00888fd",
+            "name": "Save Draft X",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -14848,
+                -2600
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "console.log('[Merge Drafts] === START ===');\n// Merge results from both branches\nconst liDraft = $('Save Draft LI').item?.json || null;\nconst xDraft = $('Save Draft X').item?.json || null;\nconsole.log('[Merge Drafts] LI draft present:', !!liDraft, 'X draft present:', !!xDraft);\n\nconst results = [];\nif (liDraft) results.push({ json: liDraft });\nif (xDraft) results.push({ json: xDraft });\n\nconsole.log('[Merge Drafts] Output count:', results.length);\nreturn results;"
+            },
+            "id": "2dff09ee-3a45-4fb1-9b25-e44b8bc8a419",
+            "name": "Merge Drafts",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -14624,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "update",
+                "schema": {
+                    "__rl": true,
+                    "mode": "list",
+                    "value": "public"
+                },
+                "table": {
+                    "__rl": true,
+                    "value": "ideas",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "status": "review",
+                        "updated_at": "={{ $now.toISO() }}",
+                        "id": "={{ $('Prepare Draft Context').item.json.idea_id }}"
+                    },
+                    "matchingColumns": [
+                        "id"
+                    ],
+                    "schema": [
+                        {
+                            "id": "id",
+                            "displayName": "id",
+                            "type": "string",
+                            "canBeUsedToMatch": true
+                        },
+                        {
+                            "id": "status",
+                            "displayName": "status",
+                            "type": "string",
+                            "canBeUsedToMatch": false
+                        },
+                        {
+                            "id": "updated_at",
+                            "displayName": "updated_at",
+                            "type": "dateTime",
+                            "canBeUsedToMatch": false
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "a746f8eb-c327-41f0-92b9-a3d0752b5a9e",
+            "name": "Update Status",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                -14400,
+                -2480
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Prepare Draft Context').item.json.chat_id }}",
+                "text": "={{ ('🎬 Director\\'s Cut (' + $json.platform + ')\\n\\n' + ($json.platform == 'linkedin' ? $json.content_json.hook + '\\n\\n' + $json.content_json.body + '\\n\\n' + $json.content_json.cta : $json.content_json.tweets.join('\\n\\n---\\n\\n'))).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }}",
+                "replyMarkup": "inlineKeyboard",
+                "inlineKeyboard": {
+                    "rows": [
+                        {
+                            "row": {
+                                "buttons": [
+                                    {
+                                        "text": "🚀 Publish",
+                                        "additionalFields": {
+                                            "callback_data": "={{ 'PUB|' + $json.platform + '|' + $json.id }}"
+                                        }
+                                    },
+                                    {
+                                        "text": "✏️ Edit",
+                                        "additionalFields": {
+                                            "callback_data": "={{ 'EDIT|' + $json.platform + '|' + ($json.platform == 'linkedin' ? 'HOOK' : 'TWEET_1') + '|' + $json.id }}"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "additionalFields": {
+                    "parse_mode": "HTML"
+                }
+            },
+            "id": "feab6008-a373-4c96-a21d-e49ba7aac9d6",
+            "name": "Director's Cut",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -14400,
+                -2672
+            ],
+            "webhookId": "80ca7f65-c8bc-4ec6-8d84-1019ead90d2e",
+            "credentials": {
+                "telegramApi": {
+                    "id": "2UJLGEJQuG32Nhuu",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const tweets = $json.tweets || [];\nconst tooLong = tweets.some(t => t.length > 280);\nreturn [{\n  json: {\n    ...$json,\n    tooLong\n  }\n}];"
+            },
+            "id": "2ca22240-d09e-4874-a321-5218a993625a",
+            "name": "Validate X Length",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17312,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.tooLong }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "5f9ea0a8-1af6-437d-aa8b-6d5945efc45f",
+            "name": "X Too Long?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -17088,
+                -2600
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"{{ $json.model }}\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a Twitter expert. Below is a JSON array of tweets. Some may be over 280 characters. Shorten the ones that are too long while keeping the meaning. Return a JSON object with a 'tweets' array.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify({tweets: $json.tweets}) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}",
+                "options": {}
+            },
+            "id": "530d3696-367e-426c-a52f-2a047996c4db",
+            "name": "Shorten X with xAI",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -16864,
+                -2456
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const content = JSON.parse($json.choices[0].message.content);\nconst prev = $('Validate X Length').item.json;\nreturn [{\n  json: {\n    ...prev,\n    tweets: content.tweets\n  }\n}];"
+            },
+            "id": "ea284028-96a4-4422-9ade-6b5d51fbf638",
+            "name": "Parse Shortened X",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -16640,
+                -2456
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "return $json;"
+            },
+            "id": "d0fa559b-4dec-4bec-a811-16d7dd3b4d98",
+            "name": "Finalize X Draft",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -16416,
+                -2600
+            ]
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Claim Idea",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Claim Idea": {
+            "main": [
+                [
+                    {
+                        "node": "Idea Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Idea Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Map Research Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Map Research Input": {
+            "main": [
+                [
+                    {
+                        "node": "Exec Research",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Exec Research": {
+            "main": [
+                [
+                    {
+                        "node": "Update Idea",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Idea": {
+            "main": [
+                [
+                    {
+                        "node": "Prep Claims",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep Claims": {
+            "main": [
+                [
+                    {
+                        "node": "Save Claims",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Claims": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Draft Context",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Draft Context": {
+            "main": [
+                [
+                    {
+                        "node": "Read Prompt LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Read Prompt LI": {
+            "main": [
+                [
+                    {
+                        "node": "Build Prompt LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Read Prompt X": {
+            "main": [
+                [
+                    {
+                        "node": "Build Prompt X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Prompt LI": {
+            "main": [
+                [
+                    {
+                        "node": "Draft LinkedIn",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Prompt X": {
+            "main": [
+                [
+                    {
+                        "node": "Draft X Thread",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Draft LinkedIn": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Draft LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Draft X Thread": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Draft X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Draft LI": {
+            "main": [
+                [
+                    {
+                        "node": "Read Critic Prompt LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Draft X": {
+            "main": [
+                [
+                    {
+                        "node": "Validate X Length",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Read Critic Prompt LI": {
+            "main": [
+                [
+                    {
+                        "node": "Build Critic Prompt LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Read Critic Prompt X": {
+            "main": [
+                [
+                    {
+                        "node": "Build Critic Prompt X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Critic Prompt LI": {
+            "main": [
+                [
+                    {
+                        "node": "Critic LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Critic Prompt X": {
+            "main": [
+                [
+                    {
+                        "node": "Critic X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Critic LI": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Critique LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Critic X": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Critique X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Critique LI": {
+            "main": [
+                [
+                    {
+                        "node": "Quality Gate LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Critique X": {
+            "main": [
+                [
+                    {
+                        "node": "Quality Gate X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Quality Gate LI": {
+            "main": [
+                [
+                    {
+                        "node": "Prep LI Draft",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Loop Back LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Quality Gate X": {
+            "main": [
+                [
+                    {
+                        "node": "Prep X Draft",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Loop Back X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Back LI": {
+            "main": [
+                [
+                    {
+                        "node": "Build Prompt LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Back X": {
+            "main": [
+                [
+                    {
+                        "node": "Build Prompt X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep LI Draft": {
+            "main": [
+                [
+                    {
+                        "node": "Save Draft LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Draft LI": {
+            "main": [
+                [
+                    {
+                        "node": "Read Prompt X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep X Draft": {
+            "main": [
+                [
+                    {
+                        "node": "Save Draft X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save Draft X": {
+            "main": [
+                [
+                    {
+                        "node": "Merge Drafts",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Merge Drafts": {
+            "main": [
+                [
+                    {
+                        "node": "Update Status",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Director's Cut",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate X Length": {
+            "main": [
+                [
+                    {
+                        "node": "X Too Long?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "X Too Long?": {
+            "main": [
+                [
+                    {
+                        "node": "Shorten X with xAI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Finalize X Draft",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Shorten X with xAI": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Shortened X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Shortened X": {
+            "main": [
+                [
+                    {
+                        "node": "Finalize X Draft",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Finalize X Draft": {
+            "main": [
+                [
+                    {
+                        "node": "Read Critic Prompt X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+    }
+}

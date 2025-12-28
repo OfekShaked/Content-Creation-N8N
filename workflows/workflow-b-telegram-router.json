@@ -1,0 +1,1242 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "81cebf50-c151-4e73-8d38-125053588be6",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [
+        -4336,
+        1960
+      ],
+      "webhookId": "9fe42eb6-b4b1-4392-b539-72c3fe8ee231",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ ($json.message && $json.message.from ? $json.message.from.id : ($json.callback_query && $json.callback_query.from ? $json.callback_query.from.id : 0)) }}",
+              "value2": "={{ 315837378 }}"
+            }
+          ]
+        }
+      },
+      "id": "e881e1d4-b85b-4806-a152-8acc46cee763",
+      "name": "Auth Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -4112,
+        1960
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ ($json.message && $json.message.reply_to_message) ? 'reply' : ($json.callback_query ? 'callback' : (($json.message && $json.message.text && $json.message.text.startsWith('/')) ? 'command' : 'message')) }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "callback"
+            },
+            {
+              "value2": "message",
+              "output": 1
+            },
+            {
+              "value2": "reply",
+              "output": 2
+            },
+            {
+              "value2": "command",
+              "output": 3
+            }
+          ]
+        }
+      },
+      "id": "87f373fb-00af-433a-83a1-61f8e2dc7f6d",
+      "name": "Route Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        -3888,
+        1928
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "YqJEQKwiimHxWKxP",
+        "options": {}
+      },
+      "id": "c9722033-c446-4732-ae4e-a1e1af55bd3a",
+      "name": "Execute Workflow D",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -2992,
+        2176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.message && $json.message.text ? $json.message.text : '' }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "74459632-5f9b-4c4e-85bb-fb66d8a34075",
+      "name": "Text Only Guard",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3664,
+        1888
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message ? $json.message.chat.id : ($json.callback_query ? $json.callback_query.message.chat.id : 0) }}",
+        "text": "❌ Text only. Please send a text idea.",
+        "additionalFields": {}
+      },
+      "id": "9a8bf98e-cd04-4f85-b7fb-b8f5936d284d",
+      "name": "Reject Non-Text",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -3440,
+        1984
+      ],
+      "webhookId": "6c1ae3d3-548c-46a0-b863-d47d6f4a4fbc",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "ideas",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "raw_input": "={{ $json.message.text }}",
+            "status": "ingested",
+            "chat_id": "={{ $json.message.chat.id }}",
+            "user_id": "={{ $json.message.from.id }}"
+          }
+        },
+        "options": {
+          "outputColumns": [
+            "id"
+          ]
+        }
+      },
+      "id": "9e870032-b5f9-4aa6-a1b6-f8fc2bfc172b",
+      "name": "Save New Idea",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3440,
+        1792
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id || $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "Idea saved! Choose a tone:",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "💼 Proffesional",
+                    "additionalFields": {
+                      "callback_data": "={{ 'TONE|' + $json.id + '|Proffesional' }}"
+                    }
+                  },
+                  {
+                    "text": "🎓 Educational",
+                    "additionalFields": {
+                      "callback_data": "={{ 'TONE|' + $json.id + '|Educational' }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "💡 Though Leader",
+                    "additionalFields": {
+                      "callback_data": "={{ 'TONE|' + $json.id + '|Though Leader' }}"
+                    }
+                  },
+                  {
+                    "text": "🤔 Curious",
+                    "additionalFields": {
+                      "callback_data": "={{ 'TONE|' + $json.id + '|Curious' }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "📣 Call For Action",
+                    "additionalFields": {
+                      "callback_data": "={{ 'TONE|' + $json.id + '|Call For Action' }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "0f8acf5b-cfbb-4871-968e-200f316576da",
+      "name": "Ask Tone",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -3216,
+        1792
+      ],
+      "webhookId": "f5c2650f-99d5-436d-9da5-6e75ec719e1b",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.callback_query && $json.callback_query.data ? $json.callback_query.data.split('|')[0] : '' }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "TONE"
+            },
+            {
+              "value2": "PUB",
+              "output": 1
+            },
+            {
+              "value2": "EDIT",
+              "output": 2
+            }
+          ]
+        }
+      },
+      "id": "f285bef5-c143-4afc-95b6-fdf02330af56",
+      "name": "Route Callback",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        -3664,
+        1376
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "queryId": "={{ $json.callback_query.id }}",
+        "additionalFields": {}
+      },
+      "id": "05c69861-2413-4fb9-af36-96ece54d52a6",
+      "name": "Answer Callback (Tone)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [
+        -3440,
+        1216
+      ],
+      "webhookId": "1314dfed-8fd6-46d4-adeb-97565f59beab",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "ideas",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "requested_tone": "={{ $('Telegram Trigger').item.json.callback_query.data.split('|')[2] }}",
+            "status": "researching",
+            "updated_at": "={{ $now.toISO() }}",
+            "id": "={{ $('Telegram Trigger').item.json.callback_query.data.split('|')[1].trim() }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "requested_tone",
+              "displayName": "requested_tone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "outputColumns": [
+            "id",
+            "chat_id"
+          ]
+        }
+      },
+      "id": "54746ff7-0584-4a83-8519-4c627acbdf8f",
+      "name": "Set Tone & Update Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3216,
+        1216
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id || $('Route Callback').item.json.callback_query.message.chat.id }}",
+        "text": "✅ Tone set. I'm working on it now — I'll send a Director's Cut shortly.",
+        "additionalFields": {}
+      },
+      "id": "e33e6553-7485-4d33-82f4-85f86ff4d103",
+      "name": "Acknowledge Working",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2768,
+        1120
+      ],
+      "webhookId": "5cfdaca7-1a55-4828-a7ec-32b116d91a61",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "publish_jobs",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "draft_id": "={{ $json.callback_query.data.split('|')[2] }}",
+            "platform": "={{ $json.callback_query.data.split('|')[1] }}",
+            "status": "queued"
+          },
+          "matchingColumns": [
+            "draft_id",
+            "platform"
+          ]
+        },
+        "options": {}
+      },
+      "id": "483c3f77-fc32-4ec1-85cb-8c08b14cc909",
+      "name": "Queue Publish",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3440,
+        1408
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route Callback').item.json.callback_query.message.chat.id }}",
+        "text": "={{ 'Queued for publishing to ' + $('Route Callback').item.json.callback_query.data.split('|')[1].replace(/_/g, '\\\\_') + '!' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "ce186c16-2165-4728-8935-358aa99e790b",
+      "name": "Notify Queue",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -3216,
+        1408
+      ],
+      "webhookId": "e139f43a-d04b-4631-b11c-5ab30dc391dd",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.callback_query.message.chat.id }}",
+        "text": "={{ 'Reply to this message with your new content for `' + $json.callback_query.data.split('|')[2] + '`.\\n\\n(You have 10 minutes)' }}",
+        "replyMarkup": "forceReply",
+        "forceReply": {},
+        "additionalFields": {}
+      },
+      "id": "5230b7dd-3491-4444-8c1a-ba3fb4e880ed",
+      "name": "Ask Edit Content",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -3440,
+        1600
+      ],
+      "webhookId": "8be02b55-b0bb-4e2b-b6e3-1f571140e421",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "pending_edits",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "chat_id": "={{ $json.result.chat.id }}",
+            "user_id": "={{ $('Route Callback').item.json.callback_query.from.id }}",
+            "draft_id": "={{ $('Route Callback').item.json.callback_query.data.split('|')[3] }}",
+            "platform": "={{ $('Route Callback').item.json.callback_query.data.split('|')[1] }}",
+            "target": "={{ $('Route Callback').item.json.callback_query.data.split('|')[2] }}",
+            "reply_message_id": "={{ $json.result.message_id }}",
+            "expires_at": "={{ $now.plus({minutes: 10}).toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "chat_id",
+              "displayName": "chat_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "draft_id",
+              "displayName": "draft_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target",
+              "displayName": "target",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reply_message_id",
+              "displayName": "reply_message_id",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "expires_at",
+              "displayName": "expires_at",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "662f00e7-10b6-428c-84dd-234b8ada878a",
+      "name": "Save Pending Edit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -3216,
+        1600
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'SELECT * FROM public.pending_edits WHERE reply_message_id = ' + $json.message.reply_to_message.message_id + ' AND user_id = ' + $json.message.from.id + ' AND expires_at > NOW()' }}",
+        "additionalFields": {}
+      },
+      "id": "72d373e0-bd80-4003-a30e-a2866a656344",
+      "name": "Find Pending Edit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -3664,
+        2536
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "84899cd4-1c38-45cc-b6dd-a32ad980f7cd",
+      "name": "Edit Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3440,
+        2536
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.draft_id }}",
+              "value2": "00000000-0000-0000-0000-000000000000"
+            }
+          ]
+        }
+      },
+      "id": "20ec1344-7268-416a-8774-260752f3b272",
+      "name": "Is Prompt Edit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3216,
+        2344
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "drafts",
+          "mode": "list"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.draft_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "56211739-882e-40d0-bba2-4799c1093d71",
+      "name": "Get Draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2992,
+        2392
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const draft = $input.item.json.content_json;\nconst target = $('Find Pending Edit').item.json.target;\nconst newValue = $('Telegram Trigger').item.json.message.text;\n\n// Simple update logic (can be expanded)\nif (draft.linkedin) draft.linkedin.body = newValue;\nif (draft.x_thread && draft.x_thread.tweets) draft.x_thread.tweets[0] = newValue;\n\nreturn { json: { ...$input.item.json, content_json: draft } };"
+      },
+      "id": "91b690b8-0dd5-4423-8ae4-a2c3caed91bc",
+      "name": "Update Content Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2768,
+        2392
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'SELECT COALESCE(MAX(version_int), 0) + 1 as next_version FROM public.drafts WHERE idea_id = \\'' + $('Get Draft').item.json.idea_id + '\\' AND platform = \\'' + $('Get Draft').item.json.platform + '\\'' }}",
+        "additionalFields": {}
+      },
+      "id": "06991fbf-1333-47d5-bacd-55a7a58a5c34",
+      "name": "Get Next Version",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -2544,
+        2392
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ 'INSERT INTO public.drafts (idea_id, version_int, platform, content_json, created_at) VALUES (\\'' + $('Update Content Code').item.json.idea_id + '\\', ' + $('Get Next Version').item.json.next_version + ', \\'' + $('Update Content Code').item.json.platform + '\\', \\'' + JSON.stringify($('Update Content Code').item.json.content_json).replace(/'/g, \"''\") + '\\', NOW()) RETURNING id' }}",
+        "additionalFields": {}
+      },
+      "id": "7e04deb1-b375-4d95-9341-41ae33740efa",
+      "name": "Save New Version",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        -2320,
+        2392
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "pending_edits"
+        }
+      },
+      "id": "270120b9-9c3b-4699-b2d6-78d5fb7bc050",
+      "name": "Delete Pending Edit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -2096,
+        2392
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "BnwRfmdiL4Ht6vyJ",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "Draft Updated!",
+        "additionalFields": {}
+      },
+      "id": "151ab2ed-c748-41b0-abd4-19a9d1cbd007",
+      "name": "Notify Update",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -1872,
+        2392
+      ],
+      "webhookId": "c6ca9530-eed2-4570-be33-34490dc9cb6c",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.reply_to_message.text }}",
+              "operation": "contains",
+              "value2": "Reply to this message"
+            }
+          ]
+        }
+      },
+      "id": "b83cfdd0-b359-4554-b072-2ba67873320a",
+      "name": "Is Reply To Bot?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -3216,
+        2680
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "❌ This edit session has expired (limit is 10 mins) or is invalid.\n\nPlease click the **✏️ Edit** button again to start a new session.",
+        "additionalFields": {}
+      },
+      "id": "f239c25b-0ab6-48f7-96ce-28471e082a82",
+      "name": "Notify Expired",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2992,
+        2584
+      ],
+      "webhookId": "expired-session-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "❌ invalid reply.\n\nTo edit a post, please find the **latest message** from me that says:\n_\"Reply to this message with your new content...\"_\n\n...and reply to THAT specific message.",
+        "additionalFields": {}
+      },
+      "id": "14dc1dfa-3bbc-43fb-a907-8af10cb24760",
+      "name": "Notify Wrong Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2992,
+        2776
+      ],
+      "webhookId": "wrong-reply-webhook",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "98bb0e86-5583-47ca-bc72-01937ba5fde7",
+      "name": "Tone Update Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -2992,
+        1216
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Route Callback').item.json.callback_query.message.chat.id }}",
+        "text": "={{ '⚠️ Information not found.\\n\\n🔍 **Debug Info:**\\nID: `' + $('Telegram Trigger').item.json.callback_query.data.split('|')[1] + '`\\nRaw: `' + $('Telegram Trigger').item.json.callback_query.data + '`\\n\\nPlease forward this to the admin.' }}",
+        "additionalFields": {}
+      },
+      "id": "b6c7eefe-2645-452a-80ca-67f6682a0976",
+      "name": "Notify Tone Expired",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -2768,
+        1696
+      ],
+      "webhookId": "71b9aecc-1762-4e9d-88c1-20cdae888f89",
+      "credentials": {
+        "telegramApi": {
+          "id": "2UJLGEJQuG32Nhuu",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Auth Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Gate": {
+      "main": [
+        [
+          {
+            "node": "Route Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Type": {
+      "main": [
+        [
+          {
+            "node": "Route Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Text Only Guard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Pending Edit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Workflow D",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Only Guard": {
+      "main": [
+        [
+          {
+            "node": "Save New Idea",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Non-Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save New Idea": {
+      "main": [
+        [
+          {
+            "node": "Ask Tone",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Callback": {
+      "main": [
+        [
+          {
+            "node": "Answer Callback (Tone)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Queue Publish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ask Edit Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Callback (Tone)": {
+      "main": [
+        [
+          {
+            "node": "Set Tone & Update Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Tone & Update Status": {
+      "main": [
+        [
+          {
+            "node": "Tone Update Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Queue Publish": {
+      "main": [
+        [
+          {
+            "node": "Notify Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Edit Content": {
+      "main": [
+        [
+          {
+            "node": "Save Pending Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Pending Edit": {
+      "main": [
+        [
+          {
+            "node": "Edit Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Found?": {
+      "main": [
+        [
+          {
+            "node": "Is Prompt Edit?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Reply To Bot?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Prompt Edit?": {
+      "main": [
+        [
+          {
+            "node": "Execute Workflow D",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Draft": {
+      "main": [
+        [
+          {
+            "node": "Update Content Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Content Code": {
+      "main": [
+        [
+          {
+            "node": "Get Next Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Next Version": {
+      "main": [
+        [
+          {
+            "node": "Save New Version",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save New Version": {
+      "main": [
+        [
+          {
+            "node": "Delete Pending Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Pending Edit": {
+      "main": [
+        [
+          {
+            "node": "Notify Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Reply To Bot?": {
+      "main": [
+        [
+          {
+            "node": "Notify Expired",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Wrong Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tone Update Success?": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge Working",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Tone Expired",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+  }
+}

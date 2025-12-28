@@ -1,0 +1,63 @@
+{
+    "name": "Test xAI Tool",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "c632d545-d6d1-40e9-980e-705b881e1e42",
+            "name": "When clicking \"Execute Workflow\"",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                176,
+                -32
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"grok-beta\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful research assistant. Use the web_search tool to answer.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the current price of Bitcoin?\"\n    }\n  ],\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"function\": {\n        \"name\": \"web_search\",\n        \"description\": \"Search the web for real-time information\",\n        \"parameters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"query\": { \"type\": \"string\" }\n          },\n          \"required\": [\"query\"]\n        }\n      }\n    }\n  ],\n  \"tool_choice\": \"auto\"\n}",
+                "options": {}
+            },
+            "id": "955fd4ce-2ee4-4a3b-8528-bfff7bb140f7",
+            "name": "xAI API Call (Tool Test)",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                400,
+                -32
+            ],
+            "credentials": {
+                "httpHeaderAuth": {
+                    "id": "oajY1LULUqHI7Hcn",
+                    "name": "Header Auth account"
+                },
+                "xAiApi": {
+                    "id": "onIlmUSNMuIjXx7I",
+                    "name": "xAi account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "When clicking \"Execute Workflow\"": {
+            "main": [
+                [
+                    {
+                        "node": "xAI API Call (Tool Test)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+    }
+}

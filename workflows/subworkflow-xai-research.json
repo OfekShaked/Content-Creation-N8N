@@ -1,0 +1,106 @@
+{
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "5c4f8e49-9e6f-4eec-aa0a-c30e747ddd5f",
+            "name": "Execute Workflow Trigger",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1,
+            "position": [
+                1072,
+                96
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const query = $json.query;\nconst tone = $json.requested_tone || 'professional';\n\nconst requestBody = {\n  model: \"grok-4-1-fast-reasoning\",\n  messages: [\n    {\n      role: \"system\",\n      content: `You are a deep researcher. Use live search to find current information. Adopt a ${tone} tone in your summary. Return STRICT JSON only.`\n    },\n    {\n      role: \"user\",\n      content: `Research this topic: ${query}\\nReturn JSON: {\"summary\":\"...\",\"claims\":[{\"claim_text\":\"...\",\"claim_key\":\"...\"}],\"trending_angle\":\"...\",\"citations\":[{\"url\":\"...\",\"title\":\"...\"}]}`\n    }\n  ],\n  search_parameters: {\n    mode: \"auto\",\n    sources: [\n      { type: \"web\" },\n      { type: \"x\" }\n    ],\n    return_citations: true\n  },\n  response_format: { type: \"json_object\" }\n};\n\nreturn [{ json: requestBody }];"
+            },
+            "id": "7edb8219-dbce-4c55-9b9f-1b30994429a7",
+            "name": "Prep Request Body",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1264,
+                96
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.x.ai/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "xAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json }}",
+                "options": {}
+            },
+            "id": "77304383-fcf1-4868-ad14-9afefcc93896",
+            "name": "xAI Research API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1472,
+                96
+            ],
+            "credentials": {
+                "xAiApi": {
+                    "id": "7WUhs2RIqilrMf6L",
+                    "name": "xAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const body = $input.item.json;\nconst content = body.choices[0].message.content;\nlet research;\ntry {\n  research = JSON.parse(content);\n} catch (e) {\n  throw new Error('Invalid JSON from xAI Research: ' + content);\n}\n\n// Extract citations from search results if available\nif (body.search_results) {\n  research.citations = body.search_results.map(r => ({\n    url: r.url,\n    title: r.title\n  }));\n}\n\nreturn [{\n  json: research\n}];"
+            },
+            "id": "069d751c-00b8-4181-847e-a42828e3583e",
+            "name": "Parse Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1664,
+                96
+            ]
+        }
+    ],
+    "connections": {
+        "Execute Workflow Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Prep Request Body",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prep Request Body": {
+            "main": [
+                [
+                    {
+                        "node": "xAI Research API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "xAI Research API": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+    }
+}

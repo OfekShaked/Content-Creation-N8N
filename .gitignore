@@ -1,0 +1,36 @@
+# Ignore everything by default
+*
+
+# Allow workflows folder
+!workflows/
+!workflows/**
+
+# Allow documentation and config
+!README.md
+!.gitignore
+
+# Ignore specific sensitive files in allowed folders (if any)
+workflows/*.env
+workflows/*.local
+
+# Ignore OS and IDE metadata
+.DS_Store
+.vscode/
+.idea/
+.gemini/
+node_modules/
+n8n_data/
+postgres_data/
+postgres_n8n_data/
+postgres_workflow_data/
+backups/
+workflow-backups/
+datasets/
+cloudflared/
+scripts/
+init.sql
+docker-compose.yml
+.env
+*.ps1
+*.md
+!README.md

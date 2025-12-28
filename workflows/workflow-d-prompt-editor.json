@@ -1,0 +1,769 @@
+{
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "6142b6f5-922a-4978-b52c-c6b5c37992bf",
+            "name": "Execute Workflow Trigger",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1,
+            "position": [
+                -6336,
+                2752
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.message?.from?.id }}",
+                            "value2": "={{ 315837378 }}"
+                        }
+                    ]
+                }
+            },
+            "id": "4e67420b-88f4-4a68-87d5-931f9be58da8",
+            "name": "Auth Gate",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -6112,
+                2752
+            ]
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.message.reply_to_message ? 'reply' : ($json.message.text.startsWith('/prompt') ? 'command' : 'other') }}",
+                "rules": {
+                    "rules": [
+                        {
+                            "value2": "command"
+                        },
+                        {
+                            "value2": "reply"
+                        }
+                    ]
+                }
+            },
+            "id": "d05d1e34-c9ed-409a-aab8-16ab1e618158",
+            "name": "Route Type",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                -5888,
+                2720
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Extract the prompt key from /prompt <key> command\nconst text = $json.message.text || '';\nconst parts = text.split(/\\s+/);\nconst key = parts[1] || '';\n\nreturn [{\n  json: {\n    key,\n    chat_id: $json.message.chat.id,\n    message_id: $json.message.message_id\n  }\n}];"
+            },
+            "id": "4b7e10ca-4cbc-4a6f-a3f3-021de0897d33",
+            "name": "Parse Command",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -5664,
+                2464
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.key }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "f4db389f-b994-426e-94fa-0e29a3b2200c",
+            "name": "Key Provided?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -5440,
+                2464
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT key, stage, platform, model, temperature, system_prompt, user_prompt FROM prompt_templates ORDER BY stage, platform;",
+                "additionalFields": {}
+            },
+            "id": "dcc28154-f70c-4203-93f4-f9ed00734be4",
+            "name": "List All Prompts",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -5216,
+                2656
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format list of available prompts\nconst prompts = $items();\nlet text = '📝 Available Prompt Templates\\n\\n';\n\nfor (const p of prompts) {\n  const platform = p.json.platform || 'all';\n  text += `• ${p.json.key} (${p.json.stage}/${platform})\\n`;\n}\n\ntext += '\\nUse /prompt <key> to view/edit a specific prompt';\n\nreturn [{\n  json: {\n    text,\n    chat_id: $('Parse Command').item.json.chat_id\n  }\n}];"
+            },
+            "id": "85d3671e-0e2a-492f-8e41-a9fe04c80922",
+            "name": "Format List",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -4992,
+                2656
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $json.chat_id }}",
+                "text": "={{ $json.text }}",
+                "additionalFields": {}
+            },
+            "id": "6dced800-50f5-46a2-a4d7-b6947a2adcc5",
+            "name": "Send List",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                2656
+            ],
+            "webhookId": "c0087235-5009-4265-bcf8-05b9017cac19",
+            "credentials": {
+                "telegramApi": {
+                    "id": "1YNiCH9RTWUUFfQ6",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT * FROM prompt_templates WHERE key = $1;",
+                "additionalFields": {
+                    "queryParams": "={{ $json.key }}"
+                }
+            },
+            "id": "e2d7bda0-1f7a-49a7-acb4-bc1c042d5e3d",
+            "name": "Lookup Prompt",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -5216,
+                2368
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.key }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "595d6de1-b50e-4f09-8fd4-c384ea42578f",
+            "name": "Prompt Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -4992,
+                2368
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Parse Command').item.json.chat_id }}",
+                "text": "❌ Prompt template not found. Use /prompt to list available templates.",
+                "additionalFields": {}
+            },
+            "id": "768c7d3b-75f4-463a-9671-87efab065886",
+            "name": "Not Found",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                2464
+            ],
+            "webhookId": "82c5d18e-d083-4dc5-a42c-641419d2cc2c",
+            "credentials": {
+                "telegramApi": {
+                    "id": "1YNiCH9RTWUUFfQ6",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format the prompt for display\nconst p = $json;\nlet text = `📝 *Prompt: ${p.key}*\\n\\n`;\ntext += `*Stage:* ${p.stage}\\n`;\ntext += `*Platform:* ${p.platform || 'all'}\\n`;\ntext += `*Model:* ${p.model}\\n`;\ntext += `*Temperature:* ${p.temperature}\\n\\n`;\ntext += `*System Prompt:*\\n\\`\\`\\`\\n${p.system_prompt.substring(0, 1000)}${p.system_prompt.length > 1000 ? '...' : ''}\\n\\`\\`\\`\\n\\n`;\ntext += `*User Prompt:*\\n\\`\\`\\`\\n${p.user_prompt.substring(0, 1500)}${p.user_prompt.length > 1500 ? '...' : ''}\\n\\`\\`\\`\\n\\n`;\ntext += `_Reply to this message with one of:_\\n`;\ntext += `• \\`SYSTEM: <new system prompt>\\`\\n`;\ntext += `• \\`USER: <new user prompt>\\`\\n`;\ntext += `• \\`MODEL: <new model name>\\`\\n`;\ntext += `• \\`TEMP: <new temperature>\\``;\n\nreturn [{\n  json: {\n    text,\n    key: p.key,\n    chat_id: $('Parse Command').item.json.chat_id\n  }\n}];"
+            },
+            "id": "ef095a71-8fa1-4381-b921-997c43bd6c74",
+            "name": "Format Prompt",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -4768,
+                2272
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $json.chat_id }}",
+                "text": "={{ $json.text }}",
+                "replyMarkup": "forceReply",
+                "forceReply": {},
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "aba060e4-1ff8-41bb-9cb7-fe00de25f686",
+            "name": "Show Prompt",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -4544,
+                2272
+            ],
+            "webhookId": "82107720-0b24-443e-ac9c-d6cd7202a341",
+            "credentials": {
+                "telegramApi": {
+                    "id": "1YNiCH9RTWUUFfQ6",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "INSERT INTO pending_edits (chat_id, user_id, draft_id, platform, target, reply_message_id, expires_at) VALUES ($1::bigint, $2::bigint, '00000000-0000-0000-0000-000000000000'::uuid, 'linkedin', $3, $4::bigint, NOW() + INTERVAL '30 minutes');",
+                "additionalFields": {
+                    "queryParams": "={{ $json.result.chat.id }},={{ $json.result.from.id }},={{ $('Format Prompt').item.json.key }},={{ $json.result.message_id }}"
+                }
+            },
+            "id": "a03b2d9c-b68a-4f84-8f2a-e4d3a735499d",
+            "name": "Save Pending Edit",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4320,
+                2272
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT * FROM pending_edits WHERE reply_message_id = $1::bigint AND user_id = $2::bigint AND expires_at > NOW();",
+                "additionalFields": {
+                    "queryParams": "={{ $json.message.reply_to_message.message_id }},={{ $json.message.from.id }}"
+                }
+            },
+            "id": "540196ac-42ca-45c2-893d-3a1bd4bfcb24",
+            "name": "Find Pending Edit",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -5664,
+                3136
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "3dca1c95-a1dc-4661-b5c3-26ccfc18a7ff",
+            "name": "Edit Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -5440,
+                3136
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Parse the reply to determine what to update\nconst text = $('Execute Workflow Trigger').item.json.message.text || '';\nconst pendingEdit = $json;\nconst promptKey = pendingEdit.target; // We stored the key in 'target' field\n\nlet updateType = null;\nlet newValue = null;\n\nif (text.toUpperCase().startsWith('SYSTEM:')) {\n  updateType = 'system_prompt';\n  newValue = text.substring(7).trim();\n} else if (text.toUpperCase().startsWith('USER:')) {\n  updateType = 'user_prompt';\n  newValue = text.substring(5).trim();\n} else if (text.toUpperCase().startsWith('MODEL:')) {\n  updateType = 'model';\n  newValue = text.substring(6).trim();\n} else if (text.toUpperCase().startsWith('TEMP:')) {\n  updateType = 'temperature';\n  newValue = text.substring(5).trim();\n} else {\n  // Default to system prompt update\n  updateType = 'system_prompt';\n  newValue = text;\n}\n\nreturn [{\n  json: {\n    prompt_key: promptKey,\n    update_type: updateType,\n    new_value: newValue,\n    chat_id: $('Execute Workflow Trigger').item.json.message.chat.id,\n    pending_edit_id: pendingEdit.id\n  }\n}];"
+            },
+            "id": "d907b443-7236-4fca-94ee-c50004e13489",
+            "name": "Parse Reply",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -5216,
+                3136
+            ]
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.update_type }}",
+                "rules": {
+                    "rules": [
+                        {
+                            "value2": "system_prompt"
+                        },
+                        {
+                            "value2": "user_prompt"
+                        },
+                        {
+                            "value2": "model"
+                        },
+                        {
+                            "value2": "temperature"
+                        }
+                    ]
+                }
+            },
+            "id": "05e5a26c-514c-4afa-b2fa-d6ca3c333a2f",
+            "name": "Update Type Switch",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                -4992,
+                3104
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE prompt_templates SET system_prompt = $1, updated_at = NOW() WHERE key = $2 RETURNING key;",
+                "additionalFields": {
+                    "queryParams": "={{ $('Parse Reply').item.json.new_value }},={{ $('Parse Reply').item.json.prompt_key }}"
+                }
+            },
+            "id": "64288a0a-7429-4cae-8a44-99a1c63f1249",
+            "name": "Update System Prompt",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                2848
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE prompt_templates SET user_prompt = $1, updated_at = NOW() WHERE key = $2 RETURNING key;",
+                "additionalFields": {
+                    "queryParams": "={{ $('Parse Reply').item.json.new_value }},={{ $('Parse Reply').item.json.prompt_key }}"
+                }
+            },
+            "id": "bc06d1cc-3c43-4d91-bcf7-4b0f603f4f4f",
+            "name": "Update User Prompt",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                3040
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE prompt_templates SET model = $1, updated_at = NOW() WHERE key = $2 RETURNING key;",
+                "additionalFields": {
+                    "queryParams": "={{ $('Parse Reply').item.json.new_value }},={{ $('Parse Reply').item.json.prompt_key }}"
+                }
+            },
+            "id": "96611f31-ed71-476d-9c1c-e2acf3455672",
+            "name": "Update Model",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                3232
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE prompt_templates SET temperature = $1::numeric, updated_at = NOW() WHERE key = $2 RETURNING key;",
+                "additionalFields": {
+                    "queryParams": "={{ $('Parse Reply').item.json.new_value }},={{ $('Parse Reply').item.json.prompt_key }}"
+                }
+            },
+            "id": "24d3cb96-a854-4452-af2a-5fde99cf6da6",
+            "name": "Update Temperature",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4768,
+                3424
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "DELETE FROM pending_edits WHERE id = $1::uuid;",
+                "additionalFields": {
+                    "queryParams": "={{ $('Parse Reply').item.json.pending_edit_id }}"
+                }
+            },
+            "id": "2569cd01-48d1-4665-8b32-6fa1edbad3ca",
+            "name": "Delete Pending Edit",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -4544,
+                3152
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $('Parse Reply').item.json.chat_id }}",
+                "text": "={{ '✅ Updated `' + $('Parse Reply').item.json.update_type + '` for `' + $('Parse Reply').item.json.prompt_key + '`' }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "a77af8c1-c88b-4647-b090-2fd1a60a5af2",
+            "name": "Confirm Update",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -4320,
+                3152
+            ],
+            "webhookId": "ba9b5d33-8b90-4485-98d3-d8b0df6b25f6",
+            "credentials": {
+                "telegramApi": {
+                    "id": "1YNiCH9RTWUUFfQ6",
+                    "name": "Telegram account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Execute Workflow Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Auth Gate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Auth Gate": {
+            "main": [
+                [
+                    {
+                        "node": "Route Type",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Route Type": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Command",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Find Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Command": {
+            "main": [
+                [
+                    {
+                        "node": "Key Provided?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Key Provided?": {
+            "main": [
+                [
+                    {
+                        "node": "Lookup Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "List All Prompts",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "List All Prompts": {
+            "main": [
+                [
+                    {
+                        "node": "Format List",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format List": {
+            "main": [
+                [
+                    {
+                        "node": "Send List",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Lookup Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Prompt Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prompt Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Format Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Not Found",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Show Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Show Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Save Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Find Pending Edit": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Reply",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Reply": {
+            "main": [
+                [
+                    {
+                        "node": "Update Type Switch",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Type Switch": {
+            "main": [
+                [
+                    {
+                        "node": "Update System Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Update User Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Update Model",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Update Temperature",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update System Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Delete Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update User Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Delete Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Model": {
+            "main": [
+                [
+                    {
+                        "node": "Delete Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Update Temperature": {
+            "main": [
+                [
+                    {
+                        "node": "Delete Pending Edit",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Delete Pending Edit": {
+            "main": [
+                [
+                    {
+                        "node": "Confirm Update",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+    }
+}

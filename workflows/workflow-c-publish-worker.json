@@ -1,0 +1,519 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 2
+                        }
+                    ]
+                }
+            },
+            "id": "973814e8-1869-4503-8a2d-aa7eb7d919c8",
+            "name": "Schedule Trigger",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.1,
+            "position": [
+                -18832,
+                1888
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Generate a unique worker ID for this execution\nconst workerId = 'worker-' + $execution.id.slice(0, 8);\nreturn [{ json: { workerId } }];"
+            },
+            "id": "8676bcf0-e2f6-4ead-90b9-245e76fb151a",
+            "name": "Generate Worker ID",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -18608,
+                1888
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"WITH cte AS (SELECT id FROM publish_jobs WHERE (status = 'queued' AND next_run_at <= NOW()) OR (status = 'posting' AND started_at < NOW() - INTERVAL '5 minutes') ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED) UPDATE publish_jobs pj SET status = 'posting', started_at = NOW(), attempt_count = pj.attempt_count + 1, last_error = NULL, worker_id = '\" + $json.workerId + \"' FROM cte WHERE pj.id = cte.id RETURNING pj.*;\" }}",
+                "additionalFields": {}
+            },
+            "id": "62cc4013-198e-47df-80b9-7e942b24ed62",
+            "name": "Claim Job",
+            "type": "n8n-nodes-base.postgres",
+            "alwaysOutputData": true,
+            "typeVersion": 1,
+            "position": [
+                -18384,
+                1792
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.id }}",
+                            "operation": "isNotEmpty"
+                        }
+                    ]
+                }
+            },
+            "id": "8c62b951-3597-49b7-b0df-6419d0375f6a",
+            "name": "Job Found?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                -18160,
+                1792
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"SELECT * FROM public.drafts WHERE id = '\" + $json.draft_id + \"'\" }}",
+                "additionalFields": {}
+            },
+            "id": "61f2889c-3291-416c-afc5-826c9e0bb800",
+            "name": "Get Draft Content",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -17936,
+                1792
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "dataType": "string",
+                "value1": "={{ $json.platform ? $json.platform.toString().trim() : 'MISSING_PLATFORM' }}",
+                "rules": {
+                    "rules": [
+                        {
+                            "value2": "linkedin"
+                        },
+                        {
+                            "value2": "x_thread",
+                            "output": 1
+                        }
+                    ]
+                },
+                "fallbackOutput": 0
+            },
+            "id": "9b16d3e1-3b5d-4e22-9268-a4f8b913c10e",
+            "name": "Platform Switch",
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 1,
+            "position": [
+                -17712,
+                1760
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "315837378",
+                "text": "={{ '🚀 *NEW LINKEDIN POST READY*\\n\\n*Hook:*\\n' + $json.content_json.hook + '\\n\\n*Body:*\\n' + $json.content_json.body + '\\n\\n*CTA:*\\n' + $json.content_json.cta + '\\n\\n---\\n(Manual Publish Required)\\n(Debug Platform: ' + $json.platform + ')' }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "dd02ddb7-060a-4c46-806f-5253755eb0cc",
+            "name": "Send LI content to Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1.1,
+            "position": [
+                -17040,
+                1600
+            ],
+            "webhookId": "e77b0bfe-0fc5-4ba4-8166-4413dce4cc6d",
+            "credentials": {
+                "telegramApi": {
+                    "id": "2UJLGEJQuG32Nhuu",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE public.publish_jobs SET status = 'posted', finished_at = NOW(), external_id = 'manual', external_url = 'telegram' WHERE id = '\" + $('Claim Job').item.json.id + \"' RETURNING *\" }}",
+                "additionalFields": {}
+            },
+            "id": "1855ef74-d493-440e-8f2d-5a67c54ce0c7",
+            "name": "Mark Published LI",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -16816,
+                1600
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Extract tweets from the draft content (platform-native format)\nconst content = $json.content_json;\nconst tweets = content.tweets || [];\n\n// Convert to items with index for SplitInBatches\nreturn tweets.map((text, index) => ({\n  json: {\n    index,\n    text,\n    total: tweets.length,\n    draft_id: $json.id,\n    job_id: $('Claim Job').item.json.id\n  }\n}));"
+            },
+            "id": "196c5f5c-745e-4bd3-af34-f2cccb7e0fdb",
+            "name": "Prepare Tweets",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17488,
+                1960
+            ]
+        },
+        {
+            "parameters": {
+                "options": {
+                    "reset": false
+                }
+            },
+            "id": "03b8445e-4034-4445-9121-c3bf7a616584",
+            "name": "Loop Over Items",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                -17264,
+                1960
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Get the static data to track lastTweetId\nconst staticData = $getWorkflowStaticData('global');\nconst index = $json.index;\nconst text = $json.text;\n\n// Build the request body\nconst body = { text };\n\n// If not the first tweet, add reply reference\nif (index > 0 && staticData.lastTweetId) {\n  body.reply = {\n    in_reply_to_tweet_id: staticData.lastTweetId\n  };\n}\n\nreturn [{\n  json: {\n    ...$json,\n    requestBody: body,\n    isFirst: index === 0\n  }\n}];"
+            },
+            "id": "3a63805a-c9c3-45fe-aa79-7f0f352362bd",
+            "name": "Build Tweet Request",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17040,
+                1792
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.twitter.com/2/tweets",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "twitterOAuth2Api",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+                "options": {}
+            },
+            "id": "60c54173-3961-48de-828e-bd85ea2eef54",
+            "name": "Create Tweet",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                -16816,
+                1792
+            ],
+            "credentials": {
+                "twitterOAuth2Api": {
+                    "id": "NB81t45YXxHK35AH",
+                    "name": "X account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Store the tweet ID for the next iteration\nconst staticData = $getWorkflowStaticData('global');\nconst tweetId = $json.data?.id;\n\nif (tweetId) {\n  staticData.lastTweetId = tweetId;\n  \n  // If this is the first tweet, also store it as the thread head\n  if ($('Build Tweet Request').item.json.isFirst) {\n    staticData.firstTweetId = tweetId;\n  }\n}\n\nreturn [{\n  json: {\n    ...$json,\n    tweetId,\n    firstTweetId: staticData.firstTweetId,\n    index: $('Build Tweet Request').item.json.index,\n    total: $('Build Tweet Request').item.json.total,\n    job_id: $('Build Tweet Request').item.json.job_id\n  }\n}];"
+            },
+            "id": "3a33095c-1e75-4e5d-9a95-82bf7d8c36f4",
+            "name": "Store Tweet ID",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -16592,
+                1888
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Clear the static data after thread is complete\nconst staticData = $getWorkflowStaticData('global');\nconst firstTweetId = staticData.firstTweetId;\n\n// Clear for next run\ndelete staticData.lastTweetId;\ndelete staticData.firstTweetId;\n\nreturn [{\n  json: {\n    firstTweetId,\n    job_id: $('Claim Job').item.json.id\n  }\n}];"
+            },
+            "id": "9accddc8-a5e6-4a7f-9390-5169a56c130a",
+            "name": "Cleanup State",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -17040,
+                1984
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "={{ \"UPDATE public.publish_jobs SET status = 'posted', finished_at = NOW(), external_id = '\" + $json.firstTweetId + \"', external_url = 'https://x.com/user/status/\" + $json.firstTweetId + \"' WHERE id = '\" + $json.job_id + \"' RETURNING *\" }}",
+                "additionalFields": {}
+            },
+            "id": "71cff35f-c001-4b44-aba3-0c07f2681c72",
+            "name": "Mark Published X",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -16816,
+                1984
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "chatId": "315837378",
+                "text": "={{ $json.firstTweetId ? '✅ Published to X (Thread) successfully! https://x.com/i/status/' + $json.firstTweetId : '✅ LinkedIn content sent to you!' }}",
+                "additionalFields": {}
+            },
+            "id": "3ee3e42d-35cd-4f7a-9581-f3190c18c0a2",
+            "name": "Notify Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                -16592,
+                1696
+            ],
+            "webhookId": "978b64d4-fd95-4af0-990c-f39cfb872e98",
+            "credentials": {
+                "telegramApi": {
+                    "id": "2UJLGEJQuG32Nhuu",
+                    "name": "Telegram account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "DELETE FROM public.pending_edits WHERE expires_at < NOW()",
+                "additionalFields": {}
+            },
+            "id": "89d14b6c-9c5e-4b55-9a20-6549ad311d1f",
+            "name": "Cleanup Expired Edits",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 1,
+            "position": [
+                -18384,
+                1984
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "BnwRfmdiL4Ht6vyJ",
+                    "name": "Postgres account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Schedule Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Worker ID",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Worker ID": {
+            "main": [
+                [
+                    {
+                        "node": "Claim Job",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Cleanup Expired Edits",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Claim Job": {
+            "main": [
+                [
+                    {
+                        "node": "Job Found?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Job Found?": {
+            "main": [
+                [
+                    {
+                        "node": "Get Draft Content",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get Draft Content": {
+            "main": [
+                [
+                    {
+                        "node": "Platform Switch",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Platform Switch": {
+            "main": [
+                [
+                    {
+                        "node": "Send LI content to Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Prepare Tweets",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Send LI content to Telegram": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Published LI",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mark Published LI": {
+            "main": [
+                [
+                    {
+                        "node": "Notify Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Tweets": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Loop Over Items": {
+            "main": [
+                [
+                    {
+                        "node": "Cleanup State",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Build Tweet Request",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Tweet Request": {
+            "main": [
+                [
+                    {
+                        "node": "Create Tweet",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create Tweet": {
+            "main": [
+                [
+                    {
+                        "node": "Store Tweet ID",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Store Tweet ID": {
+            "main": [
+                [
+                    {
+                        "node": "Loop Over Items",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Cleanup State": {
+            "main": [
+                [
+                    {
+                        "node": "Mark Published X",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Mark Published X": {
+            "main": [
+                [
+                    {
+                        "node": "Notify Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "pinData": {},
+    "meta": {
+        "templateCredsSetupCompleted": true,
+        "instanceId": "e1b6db823356986f5b1a75b5346930026228bb37b15acc484ba250cfab8d547b"
+    }
+}
