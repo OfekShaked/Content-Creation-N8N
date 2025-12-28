@@ -1,19 +1,23 @@
-# Ignore everything by default
+﻿# Ignore everything by default
 *
-
-# Allow workflows folder
-!workflows/
-!workflows/**
 
 # Allow documentation and config
 !README.md
 !.gitignore
+!prompts-overview.md
+!init.sql
 
-# Ignore specific sensitive files in allowed folders (if any)
+# Allow core folders
+!workflows/
+!workflows/**
+!prompts/
+!prompts/**
+
+# Ignore specific sensitive files in allowed folders
 workflows/*.env
 workflows/*.local
 
-# Ignore OS and IDE metadata
+# OS/IDE junk
 .DS_Store
 .vscode/
 .idea/
@@ -28,9 +32,5 @@ workflow-backups/
 datasets/
 cloudflared/
 scripts/
-init.sql
-docker-compose.yml
 .env
 *.ps1
-*.md
-!README.md

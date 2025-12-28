@@ -14,6 +14,24 @@ This project automates the lifecycle of content creation, from initial research 
 - **Workflow D (Prompt Editor)**: A dedicated utility for managing and versioning AI prompt templates stored in PostgreSQL.
 - **Subworkflows**: Specialized components for research tasks.
 
+## AI Prompts & Strategies
+
+The default prompts for each stage of the content factory are located in the `prompts/` directory. These include:
+- **Research**: `research.v1.md`
+- **LinkedIn Draft**: `draft.linkedin.v1.md`
+- **X Thread Draft**: `draft.x_thread.v1.md`
+- **LinkedIn Critic**: `critic.linkedin.v1.md`
+- **X Thread Critic**: `critic.x_thread.v1.md`
+
+## Database Schema
+
+The full database schema is provided in `init.sql`. It includes the definitions for:
+- `ideas`: Content ideas and research summaries.
+- `claims`: Factual claims extracted during research.
+- `drafts`: Multi-platform content versions.
+- `publish_jobs`: Queue for social platform publishing.
+- `prompt_templates`: Storage for hot-swappable AI prompts.
+
 ## Setup Instructions
 
 ### Prerequisites
